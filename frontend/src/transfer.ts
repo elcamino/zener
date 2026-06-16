@@ -31,3 +31,47 @@ export function formatDuration(seconds: number): string {
   const minutes = Math.floor((total % 3600) / 60);
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
+
+const SMOOTHING = 0.3;
+
+export type TransferSample = {
+  bytesPerSecond: number;
+  etaSeconds: number | null;
+};
+
+export type TransferEstimator = {
+  update(loaded: number, total: number, nowMs: number): TransferSample;
+};
+
+export function createTransferEstimator(): TransferEstimator {
+  let lastMs: number | null = null;
+  let lastLoaded = 0;
+  let rate: number | null = null; // bytes/second, exponentially smoothed
+
+  return {
+    update(loaded: number, total: number, nowMs: number): TransferSample {
+      // 1. Completion takes precedence, even on the very first sample.
+      if (loaded >= total) {
+        return { bytesPerSecond: rate ?? 0, etaSeconds: 0 };
+      }
+      // 2. First sample: no interval yet, so no rate can be derived.
+      if (lastMs === null) {
+        lastMs = nowMs;
+        lastLoaded = loaded;
+        return { bytesPerSecond: rate ?? 0, etaSeconds: null };
+      }
+      const deltaMs = nowMs - lastMs;
+      // 3. Guard against a non-positive interval (two events on the same clock).
+      if (deltaMs <= 0) {
+        const eta = rate && rate > 0 ? (total - loaded) / rate : null;
+        return { bytesPerSecond: rate ?? 0, etaSeconds: eta };
+      }
+      const instant = ((loaded - lastLoaded) / deltaMs) * 1000;
+      rate = rate === null ? instant : SMOOTHING * instant + (1 - SMOOTHING) * rate;
+      lastMs = nowMs;
+      lastLoaded = loaded;
+      const eta = rate > 0 ? (total - loaded) / rate : null;
+      return { bytesPerSecond: rate, etaSeconds: eta };
+    }
+  };
+}
