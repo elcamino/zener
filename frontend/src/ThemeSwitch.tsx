@@ -15,12 +15,12 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { useSyncExternalStore } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { type LucideIcon, Monitor, Moon, Sun } from "lucide-react";
 import { createThemeController, type ThemeMode } from "./theme";
 
 const controller = createThemeController();
 
-const OPTIONS: { mode: ThemeMode; label: string; Icon: typeof Monitor }[] = [
+const OPTIONS: { mode: ThemeMode; label: string; Icon: LucideIcon }[] = [
   { mode: "system", label: "System theme", Icon: Monitor },
   { mode: "light", label: "Light theme", Icon: Sun },
   { mode: "dark", label: "Dark theme", Icon: Moon }
