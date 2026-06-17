@@ -6,7 +6,11 @@ Zener is a tiny anonymous file dropbox. Uploaders can push files to unguessable 
 
 1. Copy `.env.example` to `.env`.
 2. Set `SESSION_SECRET` to at least 32 random bytes encoded as base64.
-3. Set `ADMIN_PASSWORD` and the S3 settings.
+3. Set the admin password and the S3 settings. Either set `ADMIN_PASSWORD`
+   directly, or — to keep the plaintext out of the configuration — store a
+   bcrypt hash in `ADMIN_PASSWORD_HASH`. Generate one with `go run ./cmd/zener
+   hash-password` (prompts for the password) or `go run ./cmd/zener
+   hash-password 'your-password'`. When both are set, the hash takes precedence.
 4. Build the frontend and run the server:
 
 ```bash
@@ -62,7 +66,7 @@ Zener loads `.env` if present and then reads environment variables. Startup fail
 
 `SESSION_SECRET` must be base64-encoded and decode to at least 32 bytes. `MAX_FILE_SIZE` defaults to 5 GiB. Per-page limits can only lower the global limit, and a non-empty `ALLOWED_EXT` is a hard ceiling that per-page extension lists may narrow but not widen.
 
-Admin sessions are stateless signed cookies (7-day expiry). Rotating `SESSION_SECRET` invalidates every outstanding session immediately; changing only `ADMIN_PASSWORD` does not, so rotate the secret too if you need to force existing sessions to log out.
+Admin sessions are stateless signed cookies (7-day expiry). Rotating `SESSION_SECRET` invalidates every outstanding session immediately; changing only the admin password (`ADMIN_PASSWORD` or `ADMIN_PASSWORD_HASH`) does not, so rotate the secret too if you need to force existing sessions to log out.
 
 Server-blind E2E intake is controlled by `E2E_INTAKE_ENABLED`,
 `E2E_INTAKE_REQUIRED`, and `E2E_INTAKE_ALGORITHM`. The supported cryptographic

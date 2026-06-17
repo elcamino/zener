@@ -17,12 +17,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,10 +38,49 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	if len(os.Args) > 1 && os.Args[1] == "hash-password" {
+		if err := hashPassword(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(logger); err != nil {
 		logger.Error("startup failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// hashPassword prints a bcrypt hash for an admin password, suitable for the
+// ADMIN_PASSWORD_HASH configuration value. The password is read from the first
+// argument or, if none is given, from stdin (so it can be piped in).
+func hashPassword(args []string) error {
+	var password string
+	if len(args) > 0 {
+		password = args[0]
+	} else {
+		fmt.Fprint(os.Stderr, "Enter admin password: ")
+		scanner := bufio.NewScanner(os.Stdin)
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return err
+			}
+			return fmt.Errorf("no password provided")
+		}
+		password = scanner.Text()
+	}
+	password = strings.TrimRight(password, "\r\n")
+	if password == "" {
+		return fmt.Errorf("password must not be empty")
+	}
+	hash, err := httpapi.HashAdminPassword(password)
+	if err != nil {
+		return err
+	}
+	fmt.Println(hash)
+	return nil
 }
 
 func run(logger *slog.Logger) error {
@@ -81,6 +123,7 @@ func run(logger *slog.Logger) error {
 			SessionSecret:     cfg.SessionSecret,
 			AdminUsername:     cfg.AdminUsername,
 			AdminPassword:     cfg.AdminPassword,
+			AdminPasswordHash: cfg.AdminPasswordHash,
 			MaxFileSize:       cfg.MaxFileSize,
 			AllowedExtensions: cfg.AllowedExtensions,
 			S3Prefix:          cfg.S3.Prefix,

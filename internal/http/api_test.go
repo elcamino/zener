@@ -229,6 +229,43 @@ func TestLoginDistinguishesPasswordsBeyond72Bytes(t *testing.T) {
 	}
 }
 
+func TestLoginAcceptsPrecomputedPasswordHash(t *testing.T) {
+	hash, err := httpapi.HashAdminPassword("hashed-secret")
+	if err != nil {
+		t.Fatalf("HashAdminPassword failed: %v", err)
+	}
+	handler, _ := newTestHandlerWithConfig(t, func(c *httpapi.Config) {
+		c.AdminPassword = ""
+		c.AdminPasswordHash = hash
+	})
+
+	ok := performJSON(t, handler, http.MethodPost, "/api/admin/login", map[string]string{
+		"username": "admin",
+		"password": "hashed-secret",
+	}, nil, nil)
+	if ok.Code != http.StatusOK {
+		t.Fatalf("login with correct password against hash status = %d, want 200", ok.Code)
+	}
+
+	bad := performJSON(t, handler, http.MethodPost, "/api/admin/login", map[string]string{
+		"username": "admin",
+		"password": "wrong-secret",
+	}, nil, nil)
+	if bad.Code != http.StatusUnauthorized {
+		t.Fatalf("login with wrong password against hash status = %d, want 401", bad.Code)
+	}
+}
+
+func TestNewRejectsInvalidPasswordHash(t *testing.T) {
+	_, _, err := newHandlerErr(t, func(c *httpapi.Config) {
+		c.AdminPassword = ""
+		c.AdminPasswordHash = "not-a-bcrypt-hash"
+	})
+	if err == nil {
+		t.Fatal("expected invalid password hash to fail")
+	}
+}
+
 func TestUploadEnforcesGlobalExtensionCeiling(t *testing.T) {
 	handler, blobs := newTestHandlerWithConfig(t, func(c *httpapi.Config) {
 		c.AllowedExtensions = []string{"pdf", "png"}
@@ -553,6 +590,21 @@ func newTestHandlerWithConfig(t *testing.T, tweak func(*httpapi.Config)) (http.H
 
 func newHandlerWith(t *testing.T, blobs blob.Store, tweak func(*httpapi.Config)) http.Handler {
 	t.Helper()
+	handler, _, err := newHandlerWithErr(t, blobs, tweak)
+	if err != nil {
+		t.Fatalf("New handler failed: %v", err)
+	}
+	return handler
+}
+
+func newHandlerErr(t *testing.T, tweak func(*httpapi.Config)) (http.Handler, *memoryBlobStore, error) {
+	blobs := &memoryBlobStore{objects: map[string][]byte{}}
+	handler, _, err := newHandlerWithErr(t, blobs, tweak)
+	return handler, blobs, err
+}
+
+func newHandlerWithErr(t *testing.T, blobs blob.Store, tweak func(*httpapi.Config)) (http.Handler, blob.Store, error) {
+	t.Helper()
 	ctx := context.Background()
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "zener.db"))
 	if err != nil {
@@ -579,10 +631,7 @@ func newHandlerWith(t *testing.T, blobs blob.Store, tweak func(*httpapi.Config))
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Clock:     func() time.Time { return time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC) },
 	})
-	if err != nil {
-		t.Fatalf("New handler failed: %v", err)
-	}
-	return handler
+	return handler, blobs, err
 }
 
 type memoryBlobStore struct {

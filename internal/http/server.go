@@ -62,6 +62,7 @@ type Config struct {
 	SessionSecret     []byte
 	AdminUsername     string
 	AdminPassword     string
+	AdminPasswordHash string
 	MaxFileSize       int64
 	AllowedExtensions []string
 	S3Prefix          string
@@ -106,8 +107,11 @@ func New(deps Dependencies) (http.Handler, error) {
 	if len(deps.Config.SessionSecret) < 32 {
 		return nil, fmt.Errorf("session secret must be at least 32 bytes")
 	}
-	if deps.Config.AdminUsername == "" || deps.Config.AdminPassword == "" {
-		return nil, fmt.Errorf("admin credentials are required")
+	if deps.Config.AdminUsername == "" {
+		return nil, fmt.Errorf("admin username is required")
+	}
+	if deps.Config.AdminPassword == "" && deps.Config.AdminPasswordHash == "" {
+		return nil, fmt.Errorf("admin password or password hash is required")
 	}
 	if deps.Config.MaxFileSize <= 0 {
 		return nil, fmt.Errorf("max file size must be positive")
@@ -129,9 +133,20 @@ func New(deps Dependencies) (http.Handler, error) {
 	if deps.Clock == nil {
 		deps.Clock = time.Now
 	}
-	passHash, err := bcrypt.GenerateFromPassword(prehashSecret(deps.Config.AdminPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
+	// A precomputed hash keeps the plaintext password out of the
+	// configuration; fall back to hashing the plaintext at startup.
+	var passHash []byte
+	if deps.Config.AdminPasswordHash != "" {
+		passHash = []byte(deps.Config.AdminPasswordHash)
+		if _, err := bcrypt.Cost(passHash); err != nil {
+			return nil, fmt.Errorf("invalid admin password hash: %w", err)
+		}
+	} else {
+		hash, err := HashAdminPassword(deps.Config.AdminPassword)
+		if err != nil {
+			return nil, err
+		}
+		passHash = []byte(hash)
 	}
 	s := &Server{
 		store:     deps.Store,
@@ -1317,6 +1332,17 @@ func hashOptionalPIN(pin string) (string, error) {
 		return "", nil
 	}
 	hash, err := bcrypt.GenerateFromPassword(prehashSecret(pin), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+// HashAdminPassword returns a bcrypt hash of the admin password that is
+// compatible with login verification. Store the result in ADMIN_PASSWORD_HASH
+// to keep the plaintext password out of the configuration.
+func HashAdminPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword(prehashSecret(password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
 	}

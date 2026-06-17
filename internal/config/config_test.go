@@ -39,6 +39,36 @@ func TestLoadFromLookupRejectsMissingRequiredValues(t *testing.T) {
 	}
 }
 
+func TestLoadFromLookupAcceptsPasswordHashWithoutPlaintext(t *testing.T) {
+	values := baseValues()
+	delete(values, "ADMIN_PASSWORD")
+	values["ADMIN_PASSWORD_HASH"] = "$2a$10$u2jdWdEhSWnztZ0ynTflA.X2tqztNA25sWwliWeqTCvS5Dj5slUaC"
+
+	cfg, err := config.LoadFromLookup(lookupFrom(values))
+	if err != nil {
+		t.Fatalf("LoadFromLookup failed: %v", err)
+	}
+	if cfg.AdminPassword != "" {
+		t.Fatalf("expected empty AdminPassword, got %q", cfg.AdminPassword)
+	}
+	if cfg.AdminPasswordHash == "" {
+		t.Fatal("expected AdminPasswordHash to be set")
+	}
+}
+
+func TestLoadFromLookupRequiresPasswordOrHash(t *testing.T) {
+	values := baseValues()
+	delete(values, "ADMIN_PASSWORD")
+
+	_, err := config.LoadFromLookup(lookupFrom(values))
+	if err == nil {
+		t.Fatal("expected missing admin password to fail")
+	}
+	if !strings.Contains(err.Error(), "ADMIN_PASSWORD or ADMIN_PASSWORD_HASH") {
+		t.Fatalf("expected error to mention password/hash requirement, got %q", err.Error())
+	}
+}
+
 func baseValues() map[string]string {
 	secret := base64.StdEncoding.EncodeToString([]byte("12345678901234567890123456789012"))
 	return map[string]string{

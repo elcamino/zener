@@ -37,6 +37,7 @@ type Config struct {
 	SessionSecret     []byte    `json:"-"`
 	AdminUsername     string    `json:"admin_username"`
 	AdminPassword     string    `json:"-"`
+	AdminPasswordHash string    `json:"-"`
 	MaxFileSize       int64     `json:"max_file_size"`
 	AllowedExtensions []string  `json:"allowed_ext,omitempty"`
 	DBPath            string    `json:"db_path"`
@@ -84,11 +85,12 @@ func LoadFromLookup(lookup func(string) (string, bool)) (Config, error) {
 	}
 
 	cfg := Config{
-		Port:          get("PORT", "8080"),
-		BaseURL:       strings.TrimRight(require("BASE_URL"), "/"),
-		AdminUsername: get("ADMIN_USERNAME", "admin"),
-		AdminPassword: require("ADMIN_PASSWORD"),
-		DBPath:        get("DB_PATH", "/data/zener.db"),
+		Port:              get("PORT", "8080"),
+		BaseURL:           strings.TrimRight(require("BASE_URL"), "/"),
+		AdminUsername:     get("ADMIN_USERNAME", "admin"),
+		AdminPassword:     get("ADMIN_PASSWORD", ""),
+		AdminPasswordHash: get("ADMIN_PASSWORD_HASH", ""),
+		DBPath:            get("DB_PATH", "/data/zener.db"),
 		S3: S3Config{
 			Endpoint:  require("S3_ENDPOINT"),
 			Region:    require("S3_REGION"),
@@ -156,6 +158,10 @@ func LoadFromLookup(lookup func(string) (string, bool)) (Config, error) {
 	}
 	cfg.S3.UsePathStyle = usePathStyle
 
+	if cfg.AdminPassword == "" && cfg.AdminPasswordHash == "" {
+		missing = append(missing, "ADMIN_PASSWORD or ADMIN_PASSWORD_HASH")
+	}
+
 	if len(missing) > 0 {
 		return Config{}, fmt.Errorf("missing or invalid required config: %s", strings.Join(missing, ", "))
 	}
@@ -166,16 +172,18 @@ func (c Config) Redacted() string {
 	type redactedConfig Config
 	out := struct {
 		redactedConfig
-		SessionSecret string `json:"session_secret"`
-		AdminPassword string `json:"admin_password"`
-		S3AccessKey   string `json:"s3_access_key"`
-		S3SecretKey   string `json:"s3_secret_key"`
+		SessionSecret     string `json:"session_secret"`
+		AdminPassword     string `json:"admin_password"`
+		AdminPasswordHash string `json:"admin_password_hash"`
+		S3AccessKey       string `json:"s3_access_key"`
+		S3SecretKey       string `json:"s3_secret_key"`
 	}{
-		redactedConfig: redactedConfig(c),
-		SessionSecret:  redact(c.SessionSecret != nil),
-		AdminPassword:  redact(c.AdminPassword != ""),
-		S3AccessKey:    redact(c.S3.AccessKey != ""),
-		S3SecretKey:    redact(c.S3.SecretKey != ""),
+		redactedConfig:    redactedConfig(c),
+		SessionSecret:     redact(c.SessionSecret != nil),
+		AdminPassword:     redact(c.AdminPassword != ""),
+		AdminPasswordHash: redact(c.AdminPasswordHash != ""),
+		S3AccessKey:       redact(c.S3.AccessKey != ""),
+		S3SecretKey:       redact(c.S3.SecretKey != ""),
 	}
 	data, err := json.Marshal(out)
 	if err != nil {
