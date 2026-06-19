@@ -15,7 +15,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, CircleDot, FileCheck2, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDot, FileCheck2, Hash, XCircle } from "lucide-react";
 import { api, formatBytes, formatDate, PublicReceipt, ReceiptStatus } from "../api";
 
 const receiptLabels: Record<ReceiptStatus, string> = {
@@ -51,6 +51,15 @@ export default function Receipt() {
     return <main className="route-loading">Sprag</main>;
   }
 
+  return <ReceiptView receipt={receipt} token={token} />;
+}
+
+type ReceiptViewProps = {
+  receipt: PublicReceipt;
+  token: string;
+};
+
+export function ReceiptView({ receipt, token }: ReceiptViewProps) {
   return (
     <main className="upload-shell">
       <section className="receipt-panel">
@@ -80,6 +89,13 @@ export default function Receipt() {
             <span>
               <strong>{receiptLabels[receipt.status]}</strong>
               <small>{formatDate(receipt.updated_at)}</small>
+            </span>
+          </div>
+          <div className="receipt-id-fact">
+            <Hash size={20} />
+            <span>
+              <strong>Receipt ID</strong>
+              <small className="receipt-id-value">{token}</small>
             </span>
           </div>
         </div>

@@ -5,7 +5,7 @@ One Go binary. Anonymous uploads. Post-quantum end-to-end encryption. Nothing fl
 
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE.md)
 [![Go 1.26](https://img.shields.io/badge/go-1.26-00ADD8.svg)](go.mod)
-[![Single binary](https://img.shields.io/badge/deploy-single%20binary-brightgreen.svg)](#installation)
+[![Single binary](https://img.shields.io/badge/deploy-single%20binary-brightgreen.svg)](INSTALL.md)
 [![E2E: ML-KEM-1024 hybrid](https://img.shields.io/badge/E2E-ML--KEM--1024%20%2B%20P--384-6f42c1.svg)](#server-blind-post-quantum-e2e-intake)
 
 ---
@@ -17,6 +17,8 @@ It is **not** a file-sharing product. It is an **asymmetric, anonymous intake bo
 With **server-blind E2E intake** enabled, the uploader's browser encrypts every file with **post-quantum hybrid cryptography** *before a single byte leaves the device*. The Go server and your S3 bucket only ever touch ciphertext. The admin decrypts client-side at download time. There is no plaintext for the server — or anyone who compromises it — to read.
 
 > A SecureDrop-adjacent intake capability without SecureDrop's operational weight: optional Tor onion ingress, but no hardened workstation, no source accounts, no air-gapped review workflow, and no multi-server deployment requirement.
+
+For deployment recipes, see [INSTALL.md](INSTALL.md). It covers plaintext intake, server-blind E2E intake, and onion-only Tor deployment.
 
 ## Who it's for
 
@@ -87,10 +89,26 @@ Sprag deliberately does **not** try to be a Dropbox, a ticketing system, or a fo
 - **Unguessable upload pages** — 24-character base62 slugs from `crypto/rand`. A page has a title, optional description, optional PIN, optional expiry, optional per-page max file size, an optional allow-list of extensions, and an active flag.
 - **Drag-and-drop uploads** with multi-file support and per-file progress (bytes + ETA).
 - **Optional PIN** per page (bcrypt-hashed, rate-limited per slug+client identifier).
-- **Admin dashboard** — create/edit/delete pages, list uploads with name/size/time, download a single file, or download a whole page as a streamed `.zip`.
+- **Submission envelopes** — files selected or dropped together share one immutable submission ID, so the admin can see which files arrived as one package.
+- **Anonymous file-status receipts** — every submission gets an unguessable receipt URL. The sender sees only aggregate arrival facts and status: received, reviewed, rejected, or downloaded.
+- **Admin dashboard** — create/edit/delete pages, list uploads grouped by submission, update file status, download a single file, or download a plaintext page as a streamed `.zip`.
 - **QR codes and copy buttons** for sharing capability URLs.
 - **Server-blind post-quantum E2E intake** (see below).
+- **Chain-of-custody manifests** — export page metadata, submission IDs, stored-object SHA-512 hashes, upload/download timestamps, and handling events as JSON.
+- **Legal hold / sealed mode** — seal a page after intake closes; later administrative actions remain possible but are recorded as post-seal events.
+- **Metadata-minimized ingress** — store plaintext uploader IPs, deterministic HMAC identifiers, or no uploader IP at all for anonymous ingress such as Tor.
+- **Onion-only Tor deployment** — publish Sprag as a v3 onion service with no host-published app or Caddy ports.
 - **Single static binary** with the frontend embedded via `embed.FS`. Pure-Go SQLite means CGO-free builds and trivial cross-compilation.
+
+## Admin Workflows
+
+1. **Create an intake page.** Set public title/instructions, optional PIN, optional expiry, file size limit, extension allow-list, and E2E policy.
+2. **Share the capability URL.** The page URL is the upload capability. QR and copy controls are built in.
+3. **Receive submissions.** Uploads are grouped into immutable submission envelopes and can include a sender receipt URL.
+4. **Track file status.** The admin can mark a submission received, reviewed, rejected, or downloaded. The public receipt page shows only that status and aggregate file counts/bytes.
+5. **Download or decrypt.** Plaintext pages support direct download and streamed ZIP export. E2E pages download ciphertext and decrypt in the admin browser with the page private key.
+6. **Export evidence.** Chain-of-custody manifests include stored-object SHA-512 hashes and handling events. In E2E mode the server-side hash is a ciphertext-object hash.
+7. **Seal when intake closes.** Sealing a page closes public intake, prevents reopening or page deletion, and marks later handling as post-seal activity.
 
 ## Security model
 
@@ -108,134 +126,35 @@ Sprag deliberately does **not** try to be a Dropbox, a ticketing system, or a fo
 
 ## Installation
 
-Sprag needs three things to run: a place for metadata (a local SQLite file, created automatically), an S3-compatible bucket for file bodies, and a handful of secrets in a `.env` file. Startup fails fast with a clear message if anything required is missing.
+Use [INSTALL.md](INSTALL.md) for full setup instructions. It includes:
 
-### Prerequisites
+- plaintext intake with normal server-readable uploads
+- server-blind post-quantum E2E intake
+- onion-only Tor deployment
+- local development and MinIO notes
+- backup, restore, and troubleshooting checklists
 
-- An **S3-compatible bucket** with credentials. Any provider works: AWS S3, Wasabi, Backblaze B2, or a self-hosted MinIO. The bucket must already exist; Sprag does not create it.
-- For the **Docker** path: Docker with the Compose plugin.
-- For the **from-source** path: Go 1.26+ and Node.js 22+.
-
-### Step 1: Create and fill in `.env`
+Minimal Docker start:
 
 ```bash
 cp .env.example .env
+openssl rand -base64 32   # put this in SESSION_SECRET
+docker compose run --build --rm sprag-app hash-password
+# put the printed hash in ADMIN_PASSWORD_HASH, then fill BASE_URL and S3_*
+docker compose up --build -d
 ```
 
-Generate a session secret (base64 that decodes to at least 32 bytes) and put it in `.env` as `SESSION_SECRET`:
-
-```bash
-openssl rand -base64 32
-```
-
-Set the admin password. Either set `ADMIN_PASSWORD` directly, or — recommended — store only a bcrypt hash so the plaintext never lives in your config:
-
-```bash
-go run ./cmd/sprag hash-password            # prompts for the password
-go run ./cmd/sprag hash-password 'your-pw'  # or pass it as an argument
-```
-
-Put the printed hash in `ADMIN_PASSWORD_HASH`. If both are set, the hash wins.
-
-Finally, fill in the S3 settings (`S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`) and set `BASE_URL` to the public URL the app is reached at. This may be an HTTPS clearnet URL or an HTTP `.onion` URL. To turn on the post-quantum intake feature, set `E2E_INTAKE_ENABLED=true` (and optionally `E2E_INTAKE_REQUIRED=true` to reject any plaintext page or upload).
-
-### Option A: Docker Compose (recommended)
-
-The bundled `docker-compose.yml` is a self-contained demo: it builds the app (multi-stage build to a distroless static image) and runs a Caddy reverse proxy in front of it. The app listens on port 8080 and Caddy forwards to it.
-
-Set `BASE_URL` in `.env` to the URL Caddy will serve, for example `https://sprag.org`, or `https://localhost` for a local trial. Keep `TRUSTED_PROXY_HOPS=1`, because Caddy is the single proxy appending to `X-Forwarded-For`.
-
-Local trial (Caddy issues a local CA certificate for `localhost`):
-
-```bash
-SPRAG_DOMAIN=localhost docker compose up --build
-```
-
-Production with automatic HTTPS (point your domain's DNS at the host first):
-
-```bash
-SPRAG_DOMAIN=sprag.org docker compose up --build -d
-```
-
-Caddy listens on ports 80 and 443. The app container publishes no ports of its own; it is only reachable through the proxy.
-
-### Option B: From source
-
-Build the frontend once, then run the server:
-
-```bash
-cd frontend
-npm install
-npm run build
-cd ..
-go run ./cmd/sprag
-```
-
-Open `http://localhost:8080/admin` and log in with `ADMIN_USERNAME` (default `admin`) and the admin password from your `.env`. For a fully local stack with no cloud account, run MinIO and set `S3_USE_PATH_STYLE=true`.
-
-To produce a standalone binary instead:
-
-```bash
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o sprag ./cmd/sprag
-```
-
-The build is CGO-free (pure-Go SQLite driver), so cross-compilation and single-binary distribution are trivial.
-
-### Option C: Onion-only Tor service
-
-Use `docker-compose.tor.yml` when Sprag should be reachable only through a Tor onion service. This path does not publish Caddy or app ports on the host.
-
-Start with a temporary onion `BASE_URL`, then let Tor generate the real hostname:
-
-```env
-BASE_URL=http://replace-after-first-start.onion
-TRUSTED_PROXY_HOPS=0
-ANONYMOUS_INGRESS=true
-COOKIE_SECURE=auto
-```
-
-Bring up the onion stack:
-
-```bash
-docker compose -f docker-compose.tor.yml up --build -d
-docker compose -f docker-compose.tor.yml exec tor cat /var/lib/tor/sprag/hostname
-```
-
-Put the printed hostname into `.env` as `BASE_URL=http://<hostname>.onion`, then recreate the app container:
-
-```bash
-docker compose -f docker-compose.tor.yml up -d --force-recreate sprag-app
-```
-
-See [docs/tor.md](docs/tor.md) for the threat model, hidden-service key handling, and smoke-test checklist.
-
-### Option D: Behind an existing shared Caddy
-
-If you already run a shared Caddy on an external network, drop the bundled `caddy` service and attach the app to that network instead. Keep the unique service name `sprag-app` to avoid a DNS-alias collision with another project's container, and add a block to your existing Caddyfile:
-
-```caddyfile
-sprag.org {
-    reverse_proxy sprag-app:8080
-}
-```
-
-Set `TRUSTED_PROXY_HOPS` to the number of proxies that append to `X-Forwarded-For` in front of the app (1 for a single Caddy). If you expose the app directly with no proxy, set `TRUSTED_PROXY_HOPS=0` so the header is ignored and the real TCP peer is used. Setting it too high lets clients spoof their IP and bypass rate limiting.
-
-### Step 2: First run
-
-1. Log in at `/admin`.
-2. Click **New page**, give it a title, and optionally set a PIN, an expiry, a max file size, or an allow-list of extensions.
-3. If E2E intake is enabled, generate a keypair for the page. **Back up the private key immediately and securely.** If you lose it, the encrypted uploads are gone.
-4. Share the `BASE_URL/u/<slug>` URL (a QR code is provided). Anyone with the link can upload; nobody but you can read what arrives.
+For source-based setup, use `go run ./cmd/sprag hash-password` instead of the Docker hash command.
 
 ## Configuration
 
-Sprag loads `.env` if present and then reads environment variables. Startup fails fast if required secrets or S3 values are missing.
+Sprag loads `.env` if present and then reads environment variables. Startup fails fast if required secrets or S3 values are missing. `ONION_BASE_URL` is a Docker Compose helper used by `docker-compose.tor.yml`; it is mapped to `BASE_URL` inside the app container.
 
 | Variable | Required | Default | Notes |
 |---|:---:|---|---|
 | `PORT` | | `8080` | Listen port. |
 | `BASE_URL` | Yes | | Used to build shareable `/u/<slug>` URLs. |
+| `ONION_BASE_URL` | | | Compose-only helper for `docker-compose.tor.yml`; set to `http://<hostname>.onion` after Tor generates the hostname. |
 | `COOKIE_SECURE` | | `auto` | Cookie `Secure` attribute policy: `auto`, `true`, or `false`. `auto` uses secure cookies for HTTPS and non-secure cookies only for localhost, loopback, and HTTP `.onion` origins. |
 | `SESSION_SECRET` | Yes | | Base64; must decode to at least 32 bytes. Rotating it invalidates all sessions. |
 | `ADMIN_USERNAME` | | `admin` | |
