@@ -1,0 +1,22 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <rect width="1280" height="640" fill="#F4F1EA"/>
+  <rect x="20" y="20" width="1240" height="600" fill="none" stroke="#E0D9CC" stroke-width="2"/>
+
+  <text x="80" y="104" font-size="30" letter-spacing="8" font-weight="700" fill="#B5831F">SPRAG</text>
+  <rect x="80" y="122" width="64" height="6" fill="#B5831F"/>
+
+  <text x="76" y="258" font-size="96" font-weight="700" fill="#1B1B1A">Files go in.</text>
+  <text x="76" y="364" font-size="96" font-weight="700" fill="#1B1B1A">Nothing flows back.</text>
+
+  <text x="80" y="438" font-size="34" fill="#6E6A62">Self-hosted, server-blind, post-quantum file intake.</text>
+
+  <text x="80" y="524" font-size="26" font-weight="600" fill="#4A463E">post-quantum E2E&#160;&#160;&#183;&#160;&#160;server-blind&#160;&#160;&#183;&#160;&#160;single Go binary&#160;&#160;&#183;&#160;&#160;Tor-ready&#160;&#160;&#183;&#160;&#160;GPL-3.0</text>
+
+  <text x="80" y="590" font-size="26" fill="#8A857B">github.com/elcamino/sprag</text>
+
+  <g stroke="#B5831F" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="978" y1="150" x2="1116" y2="150"/>
+    <polyline points="1072,110 1116,150 1072,190"/>
+    <line x1="1150" y1="98" x2="1150" y2="202"/>
+  </g>
+</svg>

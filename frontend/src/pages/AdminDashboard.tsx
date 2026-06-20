@@ -371,7 +371,7 @@ export default function AdminDashboard() {
       <header className="admin-topbar">
         <div>
           <p className="eyebrow">Sprag</p>
-          <h1>Dropboxes</h1>
+          <h1>Intake pages</h1>
         </div>
         <div className="topbar-actions">
           <ThemeSwitch />
