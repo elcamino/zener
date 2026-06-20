@@ -73,6 +73,28 @@ describe("E2E browser private key store", () => {
     ).resolves.toBe(privateKey);
   });
 
+  it("uses the hardened production Argon2id cost for newly stored keys", async () => {
+    const backend = new MemoryPrivateKeyBackend();
+    const identity = await generateE2EIdentity();
+    const locator = { pageID: 43, fingerprint: identity.publicIdentity.fingerprint };
+
+    await saveStoredPrivateKey({
+      ...locator,
+      privateKey: exportPrivateIdentity(identity),
+      passphrase: "correct horse battery staple",
+      backend
+    });
+
+    const stored = backend.records.values().next().value as StoredPrivateKeyRecord;
+    expect(stored.kdf).toMatchObject({
+      name: "argon2id",
+      memoryKiB: 47104,
+      iterations: 3,
+      parallelism: 1,
+      outputBytes: 32
+    });
+  });
+
   it("does not decrypt the stored private key with the wrong passphrase", async () => {
     const backend = new MemoryPrivateKeyBackend();
     const identity = await generateE2EIdentity();

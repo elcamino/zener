@@ -72,7 +72,7 @@ type SaveOptions = StoreOptions & {
 
 const productionKDFParams: E2EKeyStoreKDFParams = {
   memoryKiB: 47104,
-  iterations: 1,
+  iterations: 3,
   parallelism: 1
 };
 
